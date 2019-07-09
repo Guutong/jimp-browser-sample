@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Jimp test</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <a class="btn" href="index.html">home</a> <br />
+    <input type="file" id="face" accept="image/*" /> face <br />
+    <input type="file" id="card" accept="image/*" /> card <br />
+    <input type="file" id="bardcode" accept="image/*" /> barcode <br />
+
+    <button class="btn btn-blue" id="start-btn">merge</button>
+    <button class="btn btn-blue" id="reset-btn">Reset</button>
+    <div>time: <span id="time"></span> ms</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jimp@0.5.0/browser/lib/jimp.min.js"></script>
+    <script>
+      var intervalId = null;
+      let start = Date.now();
+      document.getElementById("reset-btn").addEventListener("click", () => {
+        for (i = 0; i < document.images.length; i++) {
+          var el = document.images[i];
+          el.parentNode.removeChild(el);
+        }
+        document.getElementById("time").innerHTML = 0;
+      });
+
+
+      document.getElementById("start-btn").addEventListener("click", () => {
+        for (i = 0; i < document.images.length; i++) {
+          var el = document.images[i];
+          el.parentNode.removeChild(el);
+        }
+        start = Date.now();
+        var face = document.getElementById('face').files[0];
+        var card = document.getElementById('card').files[0];
+        var barcode = document.getElementById('bardcode').files[0];
+        
+        mergeImg([getBase64(face), getBase64(card), getBase64(barcode)]).then(src => {
+          var img = document.createElement("img");
+          img.setAttribute("src", src);
+          document.body.appendChild(img);
+          document.getElementById("time").innerHTML = Date.now() - start;
+          if (intervalId) {
+            clearInterval(intervalId);
+          }
+        });
+      });
+
+      function getBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => {
+            let encoded = reader.result.replace(/^data:(.*;base64,)?/, '');
+            if ((encoded.length % 4) > 0) {
+                encoded += '='.repeat(4 - (encoded.length % 4));
+            }
+            resolve(encoded);
+            };
+            reader.onerror = error => reject(error);
+        });
+      }
+
+      function mergeImg(base64Images) {
+        var imagePromises = [];
+        var pageSize = {
+          width: 1200,
+          height: 1600
+        };
+        imagePromises.push(
+          new Jimp(pageSize.width, pageSize.height, 0xffffffff)
+        );
+        base64Images.forEach(base64Image => {
+          if (base64Image && base64Image.length > 0) {
+            imagePromises.push(
+              Jimp.read(
+                Buffer.from(
+                  base64Image.replace(/^data:image\/\w+;base64,/, ""),
+                  "base64"
+                )
+              )
+            );
+          }
+        });
+        return Promise.all(imagePromises).then(results => {
+          var resize = {
+            height: Math.ceil(pageSize.height / imagePromises.length),
+            width: Math.ceil(pageSize.width)
+          };
+          var backgroundImage = results[0];
+          var compositeImages = results.slice(1);
+          compositeImages.map(image =>
+            image.scaleToFit(resize.width, resize.height)
+          );
+          var marginHeight = 25;
+          compositeImages.forEach(image => {
+            backgroundImage.composite(
+              image,
+              (pageSize.width - image.bitmap.width) / 2,
+              marginHeight
+            );
+            marginHeight += resize.height + 25;
+          });
+          return backgroundImage.quality(75).getBase64Async(Jimp.MIME_JPEG);
+        });
+      }
+    </script>
+  </body>
+</html>
